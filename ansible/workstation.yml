@@ -1,0 +1,66 @@
+---
+- hosts: localhost
+  vars:
+    main_user: "hal"
+    terraform_version: 0.12.13
+    terraform_dir: /usr/local/bin
+    packer_version: "1.4.5"
+    awsvault_version: "4.7.1"
+    go_version: 1.13.4
+    docker_apt_repository: deb [arch=amd64] https://download.docker.com/linux/ubuntu disco stable # there's no support for 19.10/eoan yet
+  roles:
+    - role: migibert.terraform
+    - role: geerlingguy.packer
+    - role: fubarhouse.golang
+    - role: gantsign.visual-studio-code
+      users:
+        - username: "{{main_user}}"
+          visual_studio_code_extensions:
+            - ryu1kn.annotator
+            - fabiospampinato.vscode-git-history
+            - ms-vscode.go
+            - ms-python.python
+            - korekontrol.saltstack
+            - mauve.terraform
+          visual_studio_code_settings: {
+            "files.insertFinalNewline": true,
+            "python.pythonPath": "/usr/bin/python3",
+            "python.formatting.provider": "black",
+            "python.formatting.blackPath": "/usr/local/bin/black",
+            "python.formatting.blackArgs": [
+                "--line-length",
+                "99",
+            ],
+            "[python]": {},
+            "editor.rulers": [99],
+            "editor.renderWhitespace": "all",
+            "terraform.languageServer": {
+                "enabled": true,
+                "args": []
+            },
+            "terraform.indexing": {
+                "enabled": false,
+            },
+        }
+    - role: geerlingguy.docker
+    - role: darkwizard242.googlechrome
+
+  tasks:
+  - name: install bitwarden cli
+    snap:
+      name:
+        - bw
+        - gimp
+        - inkscape
+        - remmina
+      state: present
+
+  - name: deploy aws-vault
+    get_url:
+      url: "https://github.com/99designs/aws-vault/releases/download/v{{awsvault_version}}/aws-vault-linux-amd64"
+      dest: /usr/local/bin/aws-vault
+      mode: 0755
+  
+  - name: system wide pip packages
+    pip:
+      name: black

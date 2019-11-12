@@ -1,0 +1,8 @@
+---
+roles:
+- migibert.terraform
+- geerlingguy.packer
+- fubarhouse.golang
+- gantsign.visual-studio-code
+- geerlingguy.docker
+- darkwizard242.googlechrome
