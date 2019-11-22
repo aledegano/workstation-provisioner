@@ -1,49 +1,59 @@
 ---
 - hosts: localhost
+  vars_prompt:
+    - name: bitwarden_user
+      prompt: "Bitwarden user"
+      private: no
+
+    - name: bitwarden_master_password
+      prompt: "Bitwarden master password"
+      private: yes
+
   vars:
-    main_user: "adegano"
+    main_user: "hal"
     terraform_version: 0.12.13
     terraform_dir: /usr/local/bin
     packer_version: "1.4.5"
     awsvault_version: "4.7.1"
     go_version: 1.13.4
     docker_apt_repository: deb [arch=amd64] https://download.docker.com/linux/ubuntu disco stable # there's no support for 19.10/eoan yet
-  roles:
-    - role: migibert.terraform
-    - role: geerlingguy.packer
-    - role: fubarhouse.golang
-    - role: gantsign.visual-studio-code
-      users:
-        - username: "{{main_user}}"
-          visual_studio_code_extensions:
-            - ryu1kn.annotator
-            - fabiospampinato.vscode-git-history
-            - ms-vscode.go
-            - ms-python.python
-            - korekontrol.saltstack
-            - mauve.terraform
-          visual_studio_code_settings: {
-            "files.insertFinalNewline": true,
-            "python.pythonPath": "/usr/bin/python3",
-            "python.formatting.provider": "black",
-            "python.formatting.blackPath": "/usr/local/bin/black",
-            "python.formatting.blackArgs": [
-                "--line-length",
-                "99",
-            ],
-            "[python]": {},
-            "editor.rulers": [99],
-            "editor.renderWhitespace": "all",
-            "terraform.languageServer": {
-                "enabled": true,
-                "args": []
-            },
-            "terraform.indexing": {
-                "enabled": false,
-            },
-        }
-    - role: geerlingguy.docker
-    - role: darkwizard242.googlechrome
+    credentials_name: "AWS_credentials"
+  # roles:
+    # - role: migibert.terraform
+    # - role: geerlingguy.packer
+    # - role: fubarhouse.golang
+    # - role: gantsign.visual-studio-code
+    #   users:
+    #     - username: "{{main_user}}"
+    #       visual_studio_code_extensions:
+    #         - ryu1kn.annotator
+    #         - fabiospampinato.vscode-git-history
+    #         - ms-vscode.go
+    #         - ms-python.python
+    #         - korekontrol.saltstack
+    #         - mauve.terraform
+    #       visual_studio_code_settings: {
+    #         "files.insertFinalNewline": true,
+    #         "python.pythonPath": "/usr/bin/python3",
+    #         "python.formatting.provider": "black",
+    #         "python.formatting.blackPath": "/usr/local/bin/black",
+    #         "python.formatting.blackArgs": [
+    #             "--line-length",
+    #             "99",
+    #         ],
+    #         "[python]": {},
+    #         "editor.rulers": [99],
+    #         "editor.renderWhitespace": "all",
+    #         "terraform.languageServer": {
+    #             "enabled": true,
+    #             "args": []
+    #         },
+    #         "terraform.indexing": {
+    #             "enabled": false,
+    #         },
+    #     }
+    # - role: geerlingguy.docker
+    # - role: darkwizard242.googlechrome
 
   tasks:
   - name: install bitwarden cli
@@ -60,7 +70,40 @@
       url: "https://github.com/99designs/aws-vault/releases/download/v{{awsvault_version}}/aws-vault-linux-amd64"
       dest: /usr/local/bin/aws-vault
       mode: 0755
-  
+
   - name: system wide pip packages
     pip:
       name: black
+
+  - name: logout Bitwarden
+    command: "bw logout"
+    register: bw_logout
+    failed_when: "bw_logout.rc !=0 and 'not logged in' not in bw_logout.stderr"
+
+  - name: login Bitwarden
+    command: "bw login {{ bitwarden_user }} {{ bitwarden_master_password }} --raw"
+    register: bw_session
+    no_log: True
+
+  - name: sync Bitwarden
+    command: bw sync
+    environment:
+      BW_SESSION: "{{ bw_session.stdout }}"
+
+  - name: get AWS access key
+    command: "bw get username {{ credentials_name }}"
+    register: aws_access_key
+    environment:
+      BW_SESSION: "{{ bw_session.stdout }}"
+
+  - name: get AWS secret key
+    command: "bw get password {{ credentials_name }}"
+    register: aws_secret_key
+    environment:
+      BW_SESSION: "{{ bw_session.stdout }}"
+
+  - name: setup aws-vault
+    command: "aws-vault add pix4d-users --env"
+    environment:
+      AWS_ACCESS_KEY_ID: "{{ aws_access_key.stdout }}"
+      AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key.stdout }}"
